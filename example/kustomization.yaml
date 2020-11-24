@@ -1,0 +1,13 @@
+
+namespace: mst
+
+resources:
+  - rbac.yaml
+  - statefulset.yaml
+  - service.yaml
+
+commonLabels:
+  app: mongodb
+  domain: die
+  group: databases
+  feature: mst

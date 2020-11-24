@@ -1,0 +1,189 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mst-mongodb
+spec:
+  serviceName: mst-mongodb-headless
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      serviceAccountName: mst-mongodb
+      # securityContext:
+      #   runAsUser: 1001
+      #   fsGroup: 1001
+      containers:
+        - name: mongodb
+          # image: eu.gcr.io/ceiba-test-infrastructure/mongodb/mongodb-replicaset:4.4.2
+          image: eu.gcr.io/ceiba-test-infrastructure/mongodb/mongodb-replicaset@sha256:cbfedd1dd640e0c5a9c88ecfb7e1aa6532c6688a8d3613887734bb1b885ad1f5
+          # imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          env:
+            # customs
+            - name: MONGO_CONFIGURE_REPLICA_SET
+              value: "true"
+            - name: MONGODB_ID
+              value: mongo-0
+            # officials
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: secret
+            # TEMP
+            - name: MONGODB_0_SERVICE_SERVICE_HOST
+              value: mst-mongodb-0
+            - name: MONGODB_0_SERVICE_SERVICE_PORT
+              value: "27017"
+            - name: MONGODB_1_SERVICE_SERVICE_HOST
+              value: mst-mongodb-1
+            - name: MONGODB_1_SERVICE_SERVICE_PORT
+              value: "27017"
+            - name: MONGODB_2_SERVICE_SERVICE_HOST
+              value: mst-mongodb-2
+            - name: MONGODB_2_SERVICE_SERVICE_PORT
+              value: "27017"
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512M
+              ephemeral-storage: 2Gi
+            limits:
+              cpu: 1
+              memory: 2048M
+              ephemeral-storage: 4Gi
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+                # - /bin/bash
+                # - -c
+                # - mongo --eval "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+                # - /bin/bash
+                # - -c
+                # - mongo --eval "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          # securityContext:
+          #   runAsNonRoot: true
+          #   runAsUser: 1001
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            # Trick part 1 - This trick is to avoid to give containers write access to root filesystem
+            - name: tmp
+              mountPath: /tmp
+            # ?
+            # - name: tz-hongkong
+            #   mountPath: /etc/localtime
+
+      # volumes:
+      #   - name: tz-hongkong
+      #     hostPath:
+      #       path: /etc/localtime
+
+        # - name: metrics
+        #   image: bitnami/mongodb-exporter:0.11.2
+        #   imagePullPolicy: IfNotPresent
+        #   command:
+        #     - /bin/bash
+        #     - -ec
+        #   args:
+        #     - |
+        #       /bin/mongodb_exporter --mongodb.uri "mongodb://root:$(echo $MONGODB_ROOT_PASSWORD | sed -r "s/@/%40/g;s/:/%3A/g")@localhost:27017/admin?" 
+        #   env:
+        #     - name: MONGODB_ROOT_PASSWORD
+        #       valueFrom:
+        #         secretKeyRef:
+        #           name: mst-mongodb
+        #           key: MONGODB_ROOT_PASSWORD
+        #   ports:
+        #     - name: metrics
+        #       containerPort: 9216
+        #   resources:
+        #     requests:
+        #       cpu: 100m
+        #       memory: 64Mi
+        #     limits:
+        #       cpu: 100m
+        #       memory: 128Mi
+        #   livenessProbe:
+        #     exec:
+        #       command:
+        #         - sh
+        #         - -c
+        #         - >-
+        #           /bin/mongodb_exporter --mongodb.uri "mongodb://root:$(echo $MONGODB_ROOT_PASSWORD | sed -r "s/@/%40/g;s/:/%3A/g")@localhost:27017/admin?" 
+        #           --test
+        #     initialDelaySeconds: 15
+        #     periodSeconds: 5
+        #     timeoutSeconds: 5
+        #     failureThreshold: 3
+        #     successThreshold: 1
+        #   readinessProbe:
+        #     exec:
+        #       command:
+        #         - sh
+        #         - -c
+        #         - >-
+        #           /bin/mongodb_exporter --mongodb.uri "mongodb://root:$(echo $MONGODB_ROOT_PASSWORD | sed -r "s/@/%40/g;s/:/%3A/g")@localhost:27017/admin?" 
+        #           --test
+        #     initialDelaySeconds: 5
+        #     periodSeconds: 5
+        #     timeoutSeconds: 1
+        #     failureThreshold: 3
+        #     successThreshold: 1
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          type: ssd
+          expandable: "true"
+      spec:
+        storageClassName: ssd-expandable
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+    # Trick part 2 - This trick is to avoid to give containers write access to root filesystem
+    - metadata:
+        name: tmp
+        labels:
+          type: ssd
+          expandable: "true"
+      spec:
+        storageClassName: ssd-expandable
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1G
+
